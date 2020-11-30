@@ -1,12 +1,12 @@
 package ece.cpen502;
-import java.io.FileOutputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import robocode.RobocodeFileOutputStream;
 
-public class NeuralNet {
+public class NeuralNet implements NeuralNetInterface{
 
     final double[] bias_arr = {1.0}; // The input for each neurons bias weight
     final double error_threshold = 0.05;
@@ -55,11 +55,11 @@ public class NeuralNet {
         this.sigmoidLB = argA;
         this.sigmoidUB = argB;
 
-        this.initialize();
+        this.NN_ErrorBackpropagation();
 
     }
 
-    private void initialize(){
+    private void NN_ErrorBackpropagation(){
 
         int num_attempts = 100;
         int max_iteration = 100;
@@ -72,8 +72,8 @@ public class NeuralNet {
             int max_used_iteration = 0;
 
             // Initialize the weights
-            this.v_inputToHidden = this.initializeWeights(this.numInputs, this.numHiddenLayerNeurons);
-            this.w_hiddenToOutput = this.initializeWeights(this.numHiddenLayerNeurons, this.numOutput);
+            this.v_inputToHidden = this.initializeWeightsBetweenTwoLayers(this.numInputs, this.numHiddenLayerNeurons);
+            this.w_hiddenToOutput = this.initializeWeightsBetweenTwoLayers(this.numHiddenLayerNeurons, this.numOutput);
 
             // Initialize the weight correction terms (changes) to zero (no correction term for the first iteration)
             v_inputToHidden_corrTermPrev = new double[this.numInputs+1][this.numHiddenLayerNeurons];
@@ -132,7 +132,7 @@ public class NeuralNet {
         // Writing to file
         try{
             String output_str = prepare_2d_arr_for_matlab_import(track_mse_and_max_attempt);
-            save("TrackMSEMAXiterationBipolarWithMomentum.txt", output_str);
+            saveMSEArray("TrackMSEMAXiterationBipolarWithMomentum.txt", output_str);
         }
         catch (Exception e){
             System.out.println(e.getMessage());
@@ -145,7 +145,7 @@ public class NeuralNet {
         //Compute dot product and activation at each hidden layer neuron
         for (int j = 0; j < this.numHiddenLayerNeurons; j++){
             this.zDotProduct[j] = dotProduct(xorInputWithBias, get_col_from_2d_arr(this.v_inputToHidden, j));
-            this.zActivation[j] = customSigmoid(this.zDotProduct[j], this.sigmoidLB, this.sigmoidUB);
+            this.zActivation[j] = customSigmoidWithInputBounds(this.zDotProduct[j], this.sigmoidLB, this.sigmoidUB);
         }
 
         //Concatenate bias to the hidden layer output
@@ -154,10 +154,37 @@ public class NeuralNet {
         //Compute dot product and activation at each output layer neuron
         for (int k = 0; k < this.numOutput; k++){
             this.yDotProduct[k] = dotProduct(zOutputWithBias, get_col_from_2d_arr(this.w_hiddenToOutput, k));
-            this.yActivation[k] = customSigmoid(this.yDotProduct[k], this.sigmoidLB, this.sigmoidUB);
+            this.yActivation[k] = customSigmoidWithInputBounds(this.yDotProduct[k], this.sigmoidLB, this.sigmoidUB);
         }
 
         return yActivation;
+    }
+
+    /**
+     * @param x The input vector. An array of doubles.
+     * @return The value returned by the LUT or NN for this input vector
+     */
+    // TODO: use this method to compute output of the forward propagation
+    public double outputFor(double [] x){
+        // Concatenate input array with the bias term
+        double[] xorInputWithBias = concatenate(x, this.bias_arr);
+
+        //Compute dot product and activation at each hidden layer neuron
+        for (int j = 0; j < this.numHiddenLayerNeurons; j++){
+            this.zDotProduct[j] = dotProduct(xorInputWithBias, get_col_from_2d_arr(this.v_inputToHidden, j));
+            this.zActivation[j] = customSigmoidWithInputBounds(this.zDotProduct[j], this.sigmoidLB, this.sigmoidUB);
+        }
+
+        //Concatenate bias to the hidden layer output
+        double[] zOutputWithBias = concatenate(zActivation, this.bias_arr);
+
+        //Compute dot product and activation at each output layer neuron
+        for (int k = 0; k < this.numOutput; k++){
+            this.yDotProduct[k] = dotProduct(zOutputWithBias, get_col_from_2d_arr(this.w_hiddenToOutput, k));
+            this.yActivation[k] = customSigmoidWithInputBounds(this.yDotProduct[k], this.sigmoidLB, this.sigmoidUB);
+        }
+
+        return yActivation[0];
     }
 
     // Compute dot product between the inputs (including bias) and their weights
@@ -178,10 +205,12 @@ public class NeuralNet {
     * @param yDotProd The dot product at the output neurons (from forward propagation)
     * @param zActiv The activation function output of the neurons at the hidden layer (from forward propagation)
     * @param zDotProduct The dot product at the neurons at the hidden layer (from forward propagation)
-    * @param xorInputWithBias The XOR inputs with the bias neuron
+    * @param xor_input The XOR inputs without the bias neuron
     * @return The updated weights from input to hidden and from hidden to output
     */
-    private TwoArrays back_propagation(double[] yOutput, double[] yOutputCorrect, double[] yDotProd, double[] zActiv, double[] zDotProduct, double[] xorInputWithBias){
+    private TwoArrays back_propagation(double[] yOutput, double[] yOutputCorrect, double[] yDotProd, double[] zActiv, double[] zDotProduct, double[] xor_input){
+
+        double[] xorInputWithBias = concatenate(xor_input, this.bias_arr);
 
         double[] zOutputWithBias = concatenate(zActiv, this.bias_arr);
 
@@ -240,11 +269,30 @@ public class NeuralNet {
     }
 
     /**
+     * This method will tell the NN or the LUT the output
+     * value that should be mapped to the given input vector. I.e.
+     * the desired correct output value for an input.
+     * @param x The input vector
+     * @param argValue The new value to learn
+     * @return The error in the output for that input vector
+     */
+    public double train(double [] x, double argValue){
+        int numOutputs = 1;
+
+        // Output of the forward propagation
+        double yOutput = outputFor(x);
+
+        // Squared error
+        return (argValue - yOutput) * (argValue - yOutput);
+
+    }
+
+    /**
     * This method implements a general sigmoid with asymptotes bounded by (a,b)
     * @param x The input
     * @return f(x) = b_minus_a / (1 + e(-x)) - minus_a
     */
-    public double customSigmoid(double x, double a, double b) {
+    public double customSigmoidWithInputBounds(double x, double a, double b) {
         double gamma = b - a;
         double eta = -a;
         return gamma * (1.0 / (1.0 + (double) Math.exp(-x))) - eta;
@@ -254,19 +302,32 @@ public class NeuralNet {
         double gamma = b - a;
         double eta = -a;
         // Compute custom sigmoid
-        double customSigmoidValue =  customSigmoid(x, a, b);
+        double customSigmoidValue =  customSigmoidWithInputBounds(x, a, b);
         // Compute derivative of custom sigmoid
         return 1/gamma * (eta + customSigmoidValue) * (gamma - eta - customSigmoidValue);
     }
 
     /**
-    * Initialize the weights to random values.
-    * For say 2 inputs, the input vector is [0] & [1]. We add [2] for the bias.
-    * Like wise for hidden units. For say 2 hidden units which are stored in an array.
-    * [0] & [1] are the hidden & [2] the bias.
-    * We also initialise the last weight change arrays. This is to implement the alpha term.
-    */
-    public double[][] initializeWeights(int numInputs, int numHiddenLayer) {
+     * Return a bipolar sigmoid of the input X
+     * @param x The input
+     * @return f(x) = 2 / (1+e(-x)) - 1
+     */
+    public double sigmoid(double x){
+        return 2.0 / (1.0 + (double) Math.exp(-x)) - 1.0;
+    }
+
+    /**
+     * This method implements a general sigmoid with asymptotes bounded by (a,b)
+     * @param x The input
+     * @return f(x) = b_minus_a / (1 + e(-x)) - minus_a
+     */
+    public double customSigmoid(double x){
+        double a = -1.0; // lower bound
+        double b = 1.0; // upper bound
+        return (b - a) * (1.0 / (1.0 + (double) Math.exp(-x))) - (-a);
+    }
+
+    public double[][] initializeWeightsBetweenTwoLayers(int numInputs, int numHiddenLayer) {
         // Initialize weights as random variables in [-0.5, 0.5], including weight for the bias
         double minWeight = -0.5f;
         double maxWeight = 0.5f;
@@ -280,6 +341,71 @@ public class NeuralNet {
         }
 
         return v_ij;
+    }
+
+    /**
+     * Initialize the weights to random values.
+     * For say 2 inputs, the input vector is [0] & [1]. We add [2] for the bias.
+     * Like wise for hidden units. For say 2 hidden units which are stored in an array.
+     * [0] & [1] are the hidden & [2] the bias.
+     * We also initialise the last weight change arrays. This is to implement the alpha term.
+     */
+    // TODO: use this method to initialize weights, and not the one which asks for number of inputs/hidden neurons/outputs
+    public void initializeWeights(){
+        double minWeight = -0.5f;
+        double maxWeight = 0.5f;
+        Random rand = new Random();
+
+        // Number of inputs, number of hidden neurons (one layer), number of outputs
+        int numInputs = 2;
+        int numHiddenLayer = 4;
+        int numOutputs = 1;
+
+        // Initialize weights between input layer and hidden layer
+        double[][] v_ij = new double[numInputs+1][numHiddenLayer];
+        for (int j = 0; j < numHiddenLayer; j++){
+            for (int i = 0; i <= numInputs; i++){
+                v_ij[i][j] = minWeight + rand.nextFloat() * (maxWeight - minWeight);
+            }
+        }
+
+        // Initialize weights between hidden layer and output layer
+        double[][] w_ij = new double[numHiddenLayer+1][numOutputs];
+        for (int j = 0; j < numOutputs; j++){
+            for (int i = 0; i <= numHiddenLayer; i++){
+                w_ij[i][j] = minWeight + rand.nextFloat() * (maxWeight - minWeight);
+            }
+        }
+
+        // Initialize the weight correction terms (changes) to zero (no correction term for the first iteration)
+        v_inputToHidden_corrTermPrev = new double[numInputs + 1][numHiddenLayer];
+        w_hiddenToOutput_corrTermPrev = new double[numHiddenLayer + 1][numOutputs];
+    }
+
+    /**
+     * Initialize the weights to 0.
+     */
+    public void zeroWeights(){
+        // Number of inputs, number of hidden neurons (one layer), number of outputs
+        int numInputs = 2;
+        int numHiddenLayer = 4;
+        int numOutputs = 1;
+
+        // Initialize weights between input layer and hidden layer
+        double[][] v_ij = new double[numInputs+1][numHiddenLayer];
+        for (int j = 0; j < numHiddenLayer; j++){
+            for (int i = 0; i <= numInputs; i++){
+                v_ij[i][j] = 0.0;
+            }
+        }
+
+        // Initialize weights between hidden layer and output layer
+        double[][] w_ij = new double[numHiddenLayer+1][numOutputs];
+        for (int j = 0; j < numOutputs; j++){
+            for (int i = 0; i <= numHiddenLayer; i++){
+                w_ij[i][j] = 0.0;
+            }
+        }
     }
 
     private String prepare_2d_arr_for_matlab_import(double[][] arr){
@@ -301,7 +427,7 @@ public class NeuralNet {
 
     }
 
-    private void save(String file_path, String content) throws Exception
+    private void saveMSEArray(String file_path, String content) throws Exception
     {
         PrintStream out = new PrintStream(new FileOutputStream(file_path));
         out.print(content);
@@ -347,6 +473,106 @@ public class NeuralNet {
             this.vWeights = A;
             this.wWeights = B;
         }
+    }
+
+    /**
+     * A method to write weights of an neural net to a file. Format of file contents:
+     * numInputs
+     * numHidden
+     * weight input 0 to hidden 0
+     * weight input 0 to hidden 1
+     * ...
+     * weight input i to hidden j
+     * weight hidden 0 to output
+     * weight hidden j to output
+     * @param argFile of type File.
+     */
+    // Source: Dr. Sarkaria's code from tutorial class
+    public void save(File argFile){
+        PrintStream saveFile = null;
+
+        try{
+            saveFile = new PrintStream(new RobocodeFileOutputStream(argFile));
+        }
+        catch(IOException e){
+            System.out.println("--- Coult not create output stream for NN save file.");
+        }
+
+        saveFile.println(numInputs);
+        saveFile.println(numHiddenLayerNeurons);
+
+        // Save the weights from the input to hidden neurons (one line per weight)
+        // Saves the bias weight also (already in the weights array)
+        for (int j = 0; j < numHiddenLayerNeurons; j++){
+            for (int i = 0; i <= numInputs; i++){
+                saveFile.println(v_inputToHidden[i][j]);
+            }
+        }
+
+        // Save the weights from the hidden layer to the output neuron
+        // Saves the bias weight also
+        for (int j = 0; j < numOutput; j++){
+            for (int i = 0; i <= numHiddenLayerNeurons; i++){
+                saveFile.println(w_hiddenToOutput[i][j]);
+            }
+        }
+
+        // Close file
+        saveFile.close();
+
+    }
+
+    /**
+     * Loads the LUT or neural net weights from file. The load must of course
+     * have knowledge of how the data was written out by the save method.
+     * You should raise an error in the case that an attempt is being
+     * made to load data into an LUT or neural net whose structure does not match
+     * the data in the file. (e.g. wrong number of hidden neurons).
+     * @throws IOException
+     */
+    public void load(String argFileName) throws IOException{
+
+        FileInputStream inputFile = new FileInputStream(argFileName);
+        BufferedReader inputReader = new BufferedReader(new InputStreamReader(inputFile));
+
+        // Check that NN defined for file matches that created
+        int numInputInFile = Integer.valueOf(inputReader.readLine());
+        int numHiddenInFile = Integer.valueOf(inputReader.readLine());
+        if(numInputInFile != numInputs + 1){
+            System.out.println("--- Number of inputs in file is " + numInputInFile + "Expected " + numInputs + 1);
+            inputReader.close();
+            throw new IOException();
+        }
+        if(numHiddenInFile != numHiddenLayerNeurons + 1){
+            System.out.println("--- Number of hidden in file is " + numHiddenInFile + "Expected " + numHiddenLayerNeurons + 1);
+            inputReader.close();
+            throw new IOException();
+        }
+        if((numInputInFile != numInputs + 1) || (numHiddenInFile != numHiddenLayerNeurons + 1)){
+            inputReader.close();
+            return;
+        }
+
+        // Load the weights from input layer to hidden neurons (one line per weight)
+        // Loads the weights for the bias as well
+        for (int j = 0; j < numHiddenLayerNeurons; j++){
+            for (int i = 0; i <= numInputs; i++){
+                v_inputToHidden[i][j] = Double.valueOf(inputReader.readLine());
+            }
+        }
+
+        // Load the weights from the hidden layer to the output
+        // Loads the weight for the bias as well
+        for (int j = 0; j < numOutput; j++){
+            for (int i = 0; i <= numHiddenLayerNeurons; i++){
+                w_hiddenToOutput[i][j] = Double.valueOf(inputReader.readLine());
+            }
+        }
+
+        // Close file
+        inputFile.close();
+        inputReader.close();
+
     }
 
 }
