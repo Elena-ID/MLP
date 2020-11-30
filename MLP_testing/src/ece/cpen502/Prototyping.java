@@ -3,8 +3,6 @@ package ece.cpen502;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
-import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
 
@@ -23,7 +21,7 @@ public class Prototyping {
         double sigmoidLB = -1.0;
         double sigmoidUB = 1.0;
 //        NeuralNet nn = new NeuralNet(numOutput, numInputs, numHiddenLayerNeurons, learningRate, momentumValue, sigmoidLB, sigmoidUB);
-        NeuralNetWithProperInterfaceMethods nn = new NeuralNetWithProperInterfaceMethods(numOutput, numInputs, numHiddenLayerNeurons, learningRate, momentumValue, sigmoidLB, sigmoidUB);
+        NeuralNetED nn = new NeuralNetED(numOutput, numInputs, numHiddenLayerNeurons, learningRate, momentumValue, sigmoidLB, sigmoidUB);
     }
 
     //        try{

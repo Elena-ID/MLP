@@ -8,7 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-public class NeuralNetWithProperInterfaceMethods implements NeuralNetInterface{
+public class NeuralNetED implements NeuralNetInterface{
 
     final double[] bias_arr = {1.0}; // The input for each neurons bias weight
     final double error_threshold = 0.05;
@@ -40,13 +40,13 @@ public class NeuralNetWithProperInterfaceMethods implements NeuralNetInterface{
     double[][] w_hiddenToOutput_corrTermPrev;
 
     // Constructor
-    public NeuralNetWithProperInterfaceMethods(int argNumOutput,
-                                               int argNumInputs,
-                                               int argNumHidden,
-                                               float argLearningRate,
-                                               float argMomentumTerm,
-                                               double argA,
-                                               double argB)
+    public NeuralNetED(int argNumOutput,
+                       int argNumInputs,
+                       int argNumHidden,
+                       float argLearningRate,
+                       float argMomentumTerm,
+                       double argA,
+                       double argB)
     {
 
         this.numOutput = argNumOutput;
