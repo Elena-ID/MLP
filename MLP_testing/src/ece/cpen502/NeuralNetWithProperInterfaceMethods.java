@@ -1,12 +1,14 @@
 package ece.cpen502;
+
+import robocode.RobocodeFileOutputStream;
+
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import robocode.RobocodeFileOutputStream;
 
-public class NeuralNet implements NeuralNetInterface{
+public class NeuralNetWithProperInterfaceMethods implements NeuralNetInterface{
 
     final double[] bias_arr = {1.0}; // The input for each neurons bias weight
     final double error_threshold = 0.05;
@@ -38,13 +40,13 @@ public class NeuralNet implements NeuralNetInterface{
     double[][] w_hiddenToOutput_corrTermPrev;
 
     // Constructor
-    public NeuralNet(int argNumOutput,
-                     int argNumInputs,
-                     int argNumHidden,
-                     float argLearningRate,
-                     float argMomentumTerm,
-                     double argA,
-                     double argB)
+    public NeuralNetWithProperInterfaceMethods(int argNumOutput,
+                                               int argNumInputs,
+                                               int argNumHidden,
+                                               float argLearningRate,
+                                               float argMomentumTerm,
+                                               double argA,
+                                               double argB)
     {
 
         this.numOutput = argNumOutput;
@@ -72,12 +74,8 @@ public class NeuralNet implements NeuralNetInterface{
             int max_used_iteration = 0;
 
             // Initialize the weights
-            this.v_inputToHidden = this.initializeWeightsBetweenTwoLayers(this.numInputs, this.numHiddenLayerNeurons);
-            this.w_hiddenToOutput = this.initializeWeightsBetweenTwoLayers(this.numHiddenLayerNeurons, this.numOutput);
-
             // Initialize the weight correction terms (changes) to zero (no correction term for the first iteration)
-            v_inputToHidden_corrTermPrev = new double[this.numInputs+1][this.numHiddenLayerNeurons];
-            w_hiddenToOutput_corrTermPrev = new double[this.numHiddenLayerNeurons+1][this.numOutput];
+            initializeWeights();
 
             // Declare some class variables
             this.zDotProduct = new double[this.numHiddenLayerNeurons];
@@ -85,38 +83,34 @@ public class NeuralNet implements NeuralNetInterface{
             this.yDotProduct = new double[this.numOutput];
             this.yActivation = new double[this.numOutput];
 
+            // Loop through each epoch
             for(int iteration_index = 0; iteration_index < max_iteration; iteration_index++){
 
                 double[] forward_prop_output = new double[this.xorPatterns.length];
 
-                for(int xor_index = 0; xor_index < this.xorPatterns.length; xor_index++){
+                // Loop through each input vector
+                // calculate MSE
+                for(int xorInd = 0; xorInd < this.xorPatterns.length; xorInd++){
 
-                    double[] xor_input = this.xorPatterns[xor_index];
-                    double[] correct_y = {this.xorExpectedOutput[xor_index]};
+                    double[] xor_input = this.xorPatterns[xorInd];
+                    double correct_y = this.xorExpectedOutput[xorInd];
 
-                    double[] xorInputWithBias = concatenate(xor_input, this.bias_arr);
-                    double[] ret = forward_propagation(xorInputWithBias);
-                    forward_prop_output[xor_index] = ret[0];
-
-                    TwoArrays bck_ret = back_propagation( this.yActivation, correct_y, this.yDotProduct, this.zActivation, this.zDotProduct, xorInputWithBias);
 //                System.out.println("v_inputToHidden");
 //                print2d(bck_ret.vWeights);
 //                System.out.println("w_hiddenToOutput");
 //                print2d(bck_ret.wWeights);
-
 //                System.out.println("--- Iteration num "+xor_index+" is complete ---");
+
+                    // Call train() to return the MSE for each input vector
+                    meanSquaredError[iteration_index] += train(xor_input, correct_y);
+
                 }
 
-                // calculate MSE
-                for(int xorInd = 0; xorInd < this.xorPatterns.length; xorInd++){
-                    meanSquaredError[iteration_index] += (this.xorExpectedOutput[xorInd] - forward_prop_output[xorInd]) * (this.xorExpectedOutput[xorInd] - forward_prop_output[xorInd]);
-                }
-                double mse = 0.5*meanSquaredError[iteration_index];
-                meanSquaredError[iteration_index] = mse;
+                meanSquaredError[iteration_index] = 0.5*meanSquaredError[iteration_index];
 
                 max_used_iteration = iteration_index;
-                if(mse < this.error_threshold){
-                    System.out.println("Threshold reached. Breaking the loop. Iteration count: "+iteration_index+". MSE:"+mse+" Iteration index:"+iteration_index);
+                if(meanSquaredError[iteration_index] < this.error_threshold){
+                    System.out.println("Threshold reached. Breaking the loop. Iteration count: "+iteration_index+". MSE:" + meanSquaredError[iteration_index] + " Iteration index:"+iteration_index);
                     break;
                 }
 
@@ -283,6 +277,14 @@ public class NeuralNet implements NeuralNetInterface{
         // Output of the forward propagation
         double yOutput = outputFor(x);
 
+        // Do backward propagation
+        // back_propagation() receives an array for the correct output because it was implemented with variable number of outputs
+        double[] argValueVec = new double[1];
+        argValueVec[0] = argValue;
+        double[] yOutputVec = new double[1];
+        yOutputVec[0] = yOutput;
+        TwoArrays bck_ret = back_propagation(yOutputVec, argValueVec, this.yDotProduct, this.zActivation, this.zDotProduct, x);
+
         // Squared error
         return (argValue - yOutput) * (argValue - yOutput);
 
@@ -351,7 +353,6 @@ public class NeuralNet implements NeuralNetInterface{
      * [0] & [1] are the hidden & [2] the bias.
      * We also initialise the last weight change arrays. This is to implement the alpha term.
      */
-    // TODO: use this method to initialize weights, and not the one which asks for number of inputs/hidden neurons/outputs
     public void initializeWeights(){
         double minWeight = -0.5f;
         double maxWeight = 0.5f;
@@ -363,24 +364,24 @@ public class NeuralNet implements NeuralNetInterface{
         int numOutputs = 1;
 
         // Initialize weights between input layer and hidden layer
-        double[][] v_ij = new double[numInputs+1][numHiddenLayer];
+        this.v_inputToHidden = new double[numInputs+1][numHiddenLayer];
         for (int j = 0; j < numHiddenLayer; j++){
             for (int i = 0; i <= numInputs; i++){
-                v_ij[i][j] = minWeight + rand.nextFloat() * (maxWeight - minWeight);
+                this.v_inputToHidden[i][j] = minWeight + rand.nextFloat() * (maxWeight - minWeight);
             }
         }
 
         // Initialize weights between hidden layer and output layer
-        double[][] w_ij = new double[numHiddenLayer+1][numOutputs];
+        this.w_hiddenToOutput = new double[numHiddenLayer+1][numOutputs];
         for (int j = 0; j < numOutputs; j++){
             for (int i = 0; i <= numHiddenLayer; i++){
-                w_ij[i][j] = minWeight + rand.nextFloat() * (maxWeight - minWeight);
+                this.w_hiddenToOutput[i][j] = minWeight + rand.nextFloat() * (maxWeight - minWeight);
             }
         }
 
         // Initialize the weight correction terms (changes) to zero (no correction term for the first iteration)
-        v_inputToHidden_corrTermPrev = new double[numInputs + 1][numHiddenLayer];
-        w_hiddenToOutput_corrTermPrev = new double[numHiddenLayer + 1][numOutputs];
+        this.v_inputToHidden_corrTermPrev = new double[numInputs + 1][numHiddenLayer];
+        this.w_hiddenToOutput_corrTermPrev = new double[numHiddenLayer + 1][numOutputs];
     }
 
     /**

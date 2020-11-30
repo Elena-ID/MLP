@@ -16,13 +16,14 @@ public class Prototyping {
 
     public static void random_test() {
         int numInputs = 2;
-        int umHiddenLayerNeurons = 4;
+        int numHiddenLayerNeurons = 4;
         int numOutput = 1;
         float learningRate = 0.2f;
         float momentumValue = 0.9f;
         double sigmoidLB = -1.0;
         double sigmoidUB = 1.0;
-        NeuralNet nn = new NeuralNet(numOutput, numInputs, umHiddenLayerNeurons, learningRate, momentumValue, sigmoidLB, sigmoidUB);
+//        NeuralNet nn = new NeuralNet(numOutput, numInputs, numHiddenLayerNeurons, learningRate, momentumValue, sigmoidLB, sigmoidUB);
+        NeuralNetWithProperInterfaceMethods nn = new NeuralNetWithProperInterfaceMethods(numOutput, numInputs, numHiddenLayerNeurons, learningRate, momentumValue, sigmoidLB, sigmoidUB);
     }
 
     //        try{
