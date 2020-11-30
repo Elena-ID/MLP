@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Random;
 import robocode.RobocodeFileOutputStream;
 
-public class NeuralNet implements NeuralNetInterface{
+public class NeuralNet implements NeuralNetInterfaceSS {
 
     final double[] bias_arr = {1.0}; // The input for each neurons bias weight
     final double error_threshold = 0.05;

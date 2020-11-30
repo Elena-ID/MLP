@@ -8,7 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-public class NeuralNetED implements NeuralNetInterface{
+public class NeuralNetED implements NeuralNetInterfaceSS {
 
     final double[] bias_arr = {1.0}; // The input for each neurons bias weight
     final double error_threshold = 0.05;
